@@ -1,2 +1,10 @@
 # executable file
 main
+
+# object files
+*.o
+
+# local logs file
+x.txt
+
+.vscode
