@@ -25,11 +25,6 @@ void skeleton_daemon() {
     if (setsid() < 0)
         exit(EXIT_FAILURE);
 
-    /* Catch, ignore and handle signals */
-    //TODO: Implement a working signal handler */
-    signal(SIGCHLD, SIG_IGN);
-    signal(SIGHUP, SIG_IGN);
-
     /* Fork off for the second time*/
     pid = fork();
 
@@ -56,5 +51,19 @@ void skeleton_daemon() {
     }
 
     /* Open the log file */
-    openlog ("firstdaemon", LOG_PID, LOG_DAEMON);
+    openlog("xdaemon", LOG_PID | LOG_CONS | LOG_NDELAY, LOG_DAEMON);
+	syslog(LOG_DAEMON, "start logging...");
+	syslog(LOG_DAEMON, "daemon will start its work");
+
+	int counter = 0;
+	while(1) {
+		counter++;
+		syslog(LOG_DAEMON, "inside while %d", counter);
+		sleep(1);
+		// if(counter == 15) {
+		// 	break;
+		// }
+	}
+
+	closelog();
 }
