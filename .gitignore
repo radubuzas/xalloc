@@ -1,5 +1,6 @@
-# executable file
+# executable files
 main
+xdaemon
 
 # object files
 *.o
