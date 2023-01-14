@@ -23,13 +23,13 @@ sudo nano /etc/rsyslog.conf
 
 2. At the end of this file add the following line:
 ```
-:programname,isequal,"xdaemon" /var/log/xdaemon.log
+:programname,isequal,"xallo" /var/log/xalloc.log
 ```
-This syntax is called property-based filters in RSyslog configuration terminology. By doing this you specify that you want every system log whose `programname` property is equal to `xdaemon` to be also logged to `/var/log/xdaemon.log`. The `programname` property isn't necessarily the name of the executable running the daemon, but the value passed as `ident` parameter to the `openlog` call. If `NULL` is passed then `programname` will equal to the name of the executable. 
+This syntax is called property-based filters in RSyslog configuration terminology. By doing this you specify that you want every system log whose `programname` property is equal to `xalloc` to be also logged to `/var/log/xalloc.log`. The `programname` property isn't necessarily the name of the executable running the daemon, but the value passed as `ident` parameter to the `openlog` call. If `NULL` is passed then `programname` will equal to the name of the executable. 
 
 3. Restart the logging server:
 ```
 service rsyslog restart
 ```
 I restart the `rsyslog` service because I changed `rsyslog.conf`. If you modify `syslog.conf` you should probably restart the `syslog` service.
-Now the every log made by the allocator daemon can be checked at `/var/log/xdaemon.log`!
+Now the every log made by the allocator daemon can be checked at `/var/log/xalloc.log`!

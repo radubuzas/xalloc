@@ -1,7 +1,7 @@
 #include "../include/allocator.h"
 
 int start_allocator() {
-	const char *LOGNAME = "xdaemon";
+	const char *LOGNAME = "xalloc";
 
     // turn this process into a daemon
     int ret = become_daemon(0);

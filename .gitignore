@@ -1,6 +1,7 @@
 # executable files
 main
 xdaemon
+xalloc
 
 # object files
 *.o
