@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall
+CFLAGS= -Wall -lrt
 
 # library directory
 LIBDIR=./lib/
@@ -10,7 +10,7 @@ EXE=$(LIB)
 
 # make executable
 xalloc: main.c $(LIBDIR)lib$(LIB).a
-	$(CC) $(CFLAGS) -o $(EXE) main.c -L$(LIBDIR) -l$(LIB)
+	$(CC) -o $(EXE) main.c -L$(LIBDIR) -l$(LIB) $(CFLAGS)
 
 # make xalloc static library
 $(LIBDIR)lib$(LIB).a:

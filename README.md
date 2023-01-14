@@ -1,6 +1,6 @@
 # xalloc
 
-This is a memory allocator.
+This is a memory allocator written in C. It is implemented as a daemon process which listens to requests from other processes and handles them.
 
 ## Roadmap
 
@@ -12,7 +12,7 @@ This is a memory allocator.
 
 ## TODO
 
-* Create library function to check if the daemon is running. This should help handling those situations where a process makes a memory allocation request and the daemon isn't running, or when multiple instances of the allocator are started. Using the flag `O_EXCL` in calls to `shm_open`, which returns an error if a shared memory object with the same name already exists, is a potential solution.
+* ~~Create library function to check if the daemon is running. This should help handling those situations where a process makes a memory allocation request and the daemon isn't running, or when multiple instances of the allocator are started. Using the flag `O_EXCL` in calls to `shm_open`, which returns an error if a shared memory object with the same name already exists, is a potential solution.~~
 * Create handler for daemon death for cleanup tasks such as closing memory mappings and deleting shared memory objects.
 
 ## How to run the program
