@@ -6,6 +6,9 @@ xalloc
 # object files
 *.o
 
+# static libraries
+*.a
+
 # local logs file
 x.txt
 
