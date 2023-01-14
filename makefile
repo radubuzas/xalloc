@@ -14,10 +14,13 @@ xalloc: main.c $(LIBDIR)lib$(LIB).a
 
 # make xalloc static library
 $(LIBDIR)lib$(LIB).a:
-	cd $(LIBDIR); make;
+	make lib;
 
-# clean tasks
-.PHONY: clean cleanlib cleanall
+.PHONY: clean cleanlib cleanall lib
+
+# make library
+lib:
+	cd $(LIBDIR); make;
 
 # delete executable
 clean:
