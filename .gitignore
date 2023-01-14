@@ -1,2 +1,15 @@
-# executable file
+# executable files
 main
+xdaemon
+xalloc
+
+# object files
+*.o
+
+# static libraries
+*.a
+
+# local logs file
+x.txt
+
+.vscode
