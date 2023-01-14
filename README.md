@@ -10,6 +10,11 @@ This is a memory allocator.
 4. Create automation for compiling the library, possibly through makefiles/bash scripts. 
 5. Create a separate process and test communication with the daemon through the shared memory files.
 
+## TODO
+
+* Create library function to check if the daemon is running. This should help handling those situations where a process makes a memory allocation request and the daemon isn't running, or when multiple instances of the allocator are started. Using the flag `O_EXCL` in calls to `shm_open`, which returns an error if a shared memory object with the same name already exists, is a potential solution.
+* Create handler for daemon death for cleanup tasks such as closing memory mappings and deleting shared memory objects.
+
 ## How to run the program
 
 All the compilation is managed by two makefiles, one in the root of the project, and another in `./lib`. While the former checks for any changes made to `main.c` and the static library object, `./lib/libxalloc.a`, the latter watches for all source and header files in `./lib`. To compile `main.c` and run the memory allocator run the following command in the root of the project:
