@@ -32,3 +32,4 @@ This syntax is called property-based filters in RSyslog configuration terminolog
 service rsyslog restart
 ```
 I restart the `rsyslog` service because I changed `rsyslog.conf`. If you modify `syslog.conf` you should probably restart the `syslog` service.
+Now the every log made by the allocator daemon can be checked at `/var/log/xdaemon.log`!
