@@ -12,8 +12,11 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include "become_daemon.h"
 
 int start_allocator();
+void * request_memory(unsigned long long);
 
 #endif

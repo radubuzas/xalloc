@@ -29,7 +29,7 @@ $(OBJDIR)%.o: $(SRCDIR)%.c $(HEADERS) | ./obj
 # clean tasks
 .PHONY: clean
 
-# remove object files and static library
+# remove object files (+ obj directory) and static library
 clean:
-	rm -f obj/*.o
+	rm -rf obj
 	rm -f libxalloc.a
