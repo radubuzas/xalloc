@@ -221,6 +221,8 @@ node * add_node(const int size){
 
                 new -> next = NULL;
 
+                x -> next = new;
+                syslog(LOG_DAEMON | LOG_ERR, ":) %d", x -> start_index + x -> offset + size);
                 return new;
             }
         }
