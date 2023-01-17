@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall
+CFLAGS= -Wall -lrt -pthread -lpthread
 
 # source files directory
 SRCDIR=./src/

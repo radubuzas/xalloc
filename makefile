@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -lrt
+CFLAGS= -Wall -lrt -pthread -lpthread
 
 # library directory
 LIBDIR=./lib/
@@ -16,7 +16,15 @@ xalloc: main.c $(LIBDIR)lib$(LIB).a
 $(LIBDIR)lib$(LIB).a:
 	make lib;
 
-.PHONY: clean cleanlib cleanall lib
+.PHONY: clean cleanlib cleanall lib all tests
+
+tests:
+	gcc -o test a.c -L./lib/ -lxalloc $(CFLAGS)
+
+all:
+	make lib
+	make
+	make tests
 
 # make library
 lib:

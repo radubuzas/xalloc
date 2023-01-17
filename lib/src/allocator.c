@@ -9,6 +9,7 @@ const char *ALLOCATED_SPACE = "xalloc_shared_memory";   //  this is storing allo
 const char *MEM_REQUEST = "xalloc_memory_request";      //  the shm_mem where we are gonna put the request
 const char *CRITICAL_SECTION = "xalloc_mutex";          //  the mutex key will be accesible via shm
 const char *MEM_RESPONSE = "xalloc_memory_response";    //  the proces that's accessing the critical section will wait for approval!
+
 // Logs the value of errno along with any formatted message passed as argument.
 void syslog_err(const char *format, va_list arg_list) {
 
@@ -27,7 +28,7 @@ void err_exit(const char *format, ...) {
 }
 
 void * open_memory(const char * shm_name, const int open_flag, const int open_mode,
-                 const unsigned size, const int protection, const int map_flag){
+                   const unsigned size, const int protection, const int map_flag) {
     int fd = shm_open(shm_name, open_flag, (mode_t) open_mode);
     if (fd == -1)
         err_exit("error in request_memory at shm_open \"%s\"", shm_name);
@@ -49,10 +50,15 @@ void * open_memory(const char * shm_name, const int open_flag, const int open_mo
 
 pthread_mutex_t * create_mutex(){
     pthread_mutex_t * a_mutex;
-    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR | O_CREAT | O_TRUNC, 0666,
+    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR,
                                               sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE, MAP_SHARED);
 
-    pthread_mutex_init(a_mutex, NULL);
+    int err;
+    pthread_mutexattr_t attr;
+    err = pthread_mutexattr_init(&attr); if (err) err_exit("eroare la mutexattr_init, %d", err);
+    err = pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED); if (err) err_exit("eroare la mutexattr_setpshared, %d", err);
+    pthread_mutex_init(a_mutex, &attr);
+
     return a_mutex;
 }
 
@@ -62,12 +68,8 @@ void * request_memory(unsigned long long nr_bytes){
     syslog(LOG_DAEMON | LOG_ERR, "pid: %d has requested memory", getpid());
 
     pthread_mutex_t * a_mutex;
-    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR | O_CREAT | O_TRUNC, 0666,
+    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR, S_IRUSR | S_IWUSR,
                                               sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE, MAP_SHARED);
-    /*
-    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR, 0644,
-                                              sizeof(pthread_mutex_t), PROT_READ, MAP_SHARED);
-*/
 
     void * shm_request = open_memory(MEM_REQUEST, O_RDWR, 0644,
                                          REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
@@ -82,9 +84,12 @@ void * request_memory(unsigned long long nr_bytes){
     pid_t own_pid, response_pid;
     own_pid = getpid();
 
-    pthread_mutex_lock(a_mutex);
+    if(pthread_mutex_lock(a_mutex) != 0) {
+        printf("error in pthread_mutex_lock\n");
+        err_exit("error in request_memory() at pthread_mutex_lock()");
+    }
     //  START OF CRITIZAL SECTION
-        syslog(LOG_DAEMON | LOG_ERR, "pid: %d has locked mutex", getpid());
+        syslog(LOG_DAEMON | LOG_INFO, "pid: %d has locked mutex", getpid());
         //  the caller proces sends its pid and the requiested bytes
         sprintf(shm_request, "%d %lld", own_pid, nr_bytes);
 
@@ -93,15 +98,15 @@ void * request_memory(unsigned long long nr_bytes){
             sscanf(shm_response, "%d %llu", &response_pid, &response);
             syslog(LOG_DAEMON | LOG_ERR, "A: %d", response_pid);
             if(own_pid == response_pid){
-                syslog(LOG_DAEMON | LOG_ERR, "pid: %d has received memory", getpid());
                 sprintf(shm_request, "-1 ");
 
                 //  END OF CRITICAL SECTION
-                pthread_mutex_unlock(a_mutex);
-
-                syslog(LOG_DAEMON | LOG_ERR, "pid: %d has UNlocked mutex", getpid());
+                if(pthread_mutex_unlock(a_mutex) != 0)
+                    err_exit("error in request_memory() at pthread_mutex_unlock()");
+                syslog(LOG_DAEMON | LOG_INFO, "pid: %d has UNlocked mutex %p", getpid());
                 return x + response;
             }
+            sleep(1);
         }
 }
 
@@ -201,15 +206,14 @@ int start_allocator() {
                                     pagesize, PROT_READ, MAP_SHARED);
 
     pthread_mutex_t * mutex = create_mutex();
-    //create_mutex();
 
     // run forever in the background
     pid_t pid;
     unsigned long long nr_bytes;
     while(1) {
-        sscanf(shm_requests, "%d %lld", &pid, &nr_bytes);
-        syslog(LOG_USER | LOG_ERR, "R: %d", pid);
-        if(pid != -1){
+        int ret = sscanf(shm_requests, "%d %lld", &pid, &nr_bytes);
+        if(ret != EOF && ret >= 1 && pid != -1){
+            syslog(LOG_DAEMON | LOG_INFO, "ret=%d pid=%d, will write response for this pid", ret, pid);
             sprintf(shm_responses, "%d %lld", pid, 0);
         }
         sleep(1);

@@ -2,6 +2,7 @@
 main
 xdaemon
 xalloc
+test
 
 # object files
 *.o

@@ -4,7 +4,8 @@
 
 int main(){
     pid_t pid = fork();
-    if(request_memory(1))
-        printf("%d\n", pid);
+    void *p = request_memory(1);
+    printf("p=%p pid=%d ppid=%d\n", p, getpid(), getppid());
+    wait(NULL);
     return 0;
 }
