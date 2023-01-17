@@ -107,7 +107,6 @@ void * request_memory(unsigned long long nr_bytes){
                 return x + response;
             }
             sleep(1);
-            sleep(1);
         }
 }
 
@@ -202,8 +201,10 @@ node * add_node(const int size){
 
             return new;
         }
-        else{                               //  looking for first fit
-            for(node * x = head; x != NULL; x = x -> next){
+        else{
+            node * x;            //  looking for first fit
+            for(x = head; x -> next != NULL; x = x -> next){
+                syslog(LOG_DAEMON | LOG_ERR, ";(");
                 if(x -> start_index + x -> offset + size - 1 < x -> next -> start_index){
                     new -> start_index = x -> start_index + x -> offset;
                     new -> offset = size;
@@ -213,6 +214,14 @@ node * add_node(const int size){
                     
                     return new;
                 }
+            }
+            if (x -> start_index + x -> offset + size < getpagesize()) {
+                new -> start_index = x -> start_index + x -> offset;
+                new -> offset = size;
+
+                new -> next = NULL;
+
+                return new;
             }
         }
     }
@@ -296,7 +305,10 @@ int start_allocator() {
         int ret = sscanf(shm_requests, "%d %lld", &pid, &nr_bytes);
         if(ret != EOF && ret >= 1 && pid != -1){
             syslog(LOG_DAEMON | LOG_INFO, "ret=%d pid=%d, will write response for this pid", ret, pid);
-            sprintf(shm_responses, "%d %lld", pid, 0);
+            node * x = add_node(nr_bytes);
+            if (x == NULL)
+                err_exit("OUT OF MEM!");
+            sprintf(shm_responses, "%d %lld", pid, x -> start_index);
         }
         sleep(1);
     }
