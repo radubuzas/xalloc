@@ -79,7 +79,7 @@ void * request_memory(unsigned long long nr_bytes){
                                           RESPONSE_SIZE, PROT_READ, MAP_SHARED);
 
     void * x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
-                               getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
+                           getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
 
     pid_t own_pid, response_pid;
     own_pid = getpid();
@@ -106,6 +106,7 @@ void * request_memory(unsigned long long nr_bytes){
                 syslog(LOG_DAEMON | LOG_INFO, "pid: %d has UNlocked mutex %p", getpid());
                 return x + response;
             }
+            sleep(1);
             sleep(1);
         }
 }
@@ -168,6 +169,84 @@ static int write_allocator_pid() {
     return 0;
 }
 
+typedef struct linkedList{
+    int start_index;
+    int offset;
+    struct linkedList * next;
+}node;
+
+node * head = NULL;
+
+node * add_node(const int size){
+    syslog(LOG_DAEMON | LOG_ERR, "Added size %d in array ---------------------", size);
+    node * new;
+    new = (node *) malloc(sizeof(node));
+    if(new == NULL)
+        err_exit("Bad malloc!");
+    if(head == NULL){                       //  if the linkedList is empty
+        new -> start_index = 0;
+        new -> offset = size;
+        head = new;
+
+        head -> next = NULL;
+
+        return new;
+    }
+    else{                                   //  if there is space on the left side of the vector
+        if(size < head -> start_index){
+            new -> start_index = 0;
+            new -> offset = size;
+
+            new -> next = head;
+            head = new;
+
+            return new;
+        }
+        else{                               //  looking for first fit
+            for(node * x = head; x != NULL; x = x -> next){
+                if(x -> start_index + x -> offset + size - 1 < x -> next -> start_index){
+                    new -> start_index = x -> start_index + x -> offset;
+                    new -> offset = size;
+
+                    new -> next = x -> next;
+                    x -> next = new;
+                    
+                    return new;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+int delete_node(const int index){
+    int size;
+    if (head -> start_index == index) {
+        node * new = head;
+        head = head -> next;
+        
+        size = new -> offset;
+        free(new);
+        return size;
+    }
+        
+    for (node * x = head; x != NULL; x = x -> next)
+        if (x -> next -> start_index == index) {
+            node * new = x -> next;
+            x -> next = x -> next -> next;
+            
+            size = new -> offset;
+            free(new);
+            return size;
+        }
+    return 0;
+}
+
+node * realloc_node(const int index){
+    int size = delete_node(index);
+    return add_node(size);
+}
+
 int start_allocator() {
 	const char *LOGNAME = "xalloc";
 
@@ -197,7 +276,9 @@ int start_allocator() {
     const int pagesize = getpagesize();
     
     void * shm_requests = open_memory(MEM_REQUEST, O_RDWR | O_CREAT | O_TRUNC, 0644,
-                                      REQUEST_SIZE, PROT_READ, MAP_SHARED);
+                                      REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
+
+    sprintf(shm_requests, "-1 ");
 
     void * shm_responses = open_memory(MEM_RESPONSE, O_RDWR | O_CREAT | O_TRUNC, 0644,
                                       REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
@@ -205,7 +286,8 @@ int start_allocator() {
     void * memory_ptr = open_memory(ALLOCATED_SPACE, O_RDWR | O_CREAT, 0644,
                                     pagesize, PROT_READ, MAP_SHARED);
 
-    pthread_mutex_t * mutex = create_mutex();
+    create_mutex();
+    //create_mutex();
 
     // run forever in the background
     pid_t pid;
