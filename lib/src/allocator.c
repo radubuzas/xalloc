@@ -79,7 +79,7 @@ void * request_memory(unsigned long long nr_bytes){
                                           RESPONSE_SIZE, PROT_READ, MAP_SHARED);
 
     void * x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
-                           getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
+                           getpagesize() * 100, PROT_READ | PROT_WRITE, MAP_SHARED);
 
     pid_t own_pid, response_pid;
     own_pid = getpid();
@@ -215,7 +215,7 @@ node * add_node(const int size){
                     return new;
                 }
             }
-            if (x -> start_index + x -> offset + size < getpagesize()) {
+            if (x -> start_index + x -> offset + size < getpagesize() * 100) {
                 new -> start_index = x -> start_index + x -> offset;
                 new -> offset = size;
 
@@ -295,7 +295,7 @@ int start_allocator() {
                                       REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
 
     void * memory_ptr = open_memory(ALLOCATED_SPACE, O_RDWR | O_CREAT, 0644,
-                                    pagesize, PROT_READ, MAP_SHARED);
+                                    pagesize * 100, PROT_READ, MAP_SHARED);
 
     create_mutex();
     //create_mutex();
