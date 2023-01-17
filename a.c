@@ -3,8 +3,13 @@
        #include <sys/wait.h>
 
 int main(){
+    int n;
+
     pid_t pid = fork();
-    if(request_memory(1))
-        printf("%d\n", pid);
+    request_memory(1);
+    if(pid > 0)
+        wait(NULL);
+
+
     return 0;
 }

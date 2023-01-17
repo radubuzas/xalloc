@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -lrt
+CFLAGS= -Wall -lrt -pthread -lpthread
 
 # library directory
 LIBDIR=./lib/

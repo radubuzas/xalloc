@@ -52,6 +52,13 @@ pthread_mutex_t * create_mutex(){
     a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR | O_CREAT | O_TRUNC, 0666,
                                               sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE, MAP_SHARED);
 
+    int err;
+     pthread_mutexattr_t attr;
+     err = pthread_mutexattr_init(&attr); if (err) err_exit("eroare la mutexattr_init, %d", err);
+     err = pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED); if (err) err_exit("eroare la mutexattr_setpshared, %d", err);
+     err = pthread_mutexattr_setrobust(&attr, 1); if (err) err_exit("eroare la mutexattr_setrobust, %d", err);
+     pthread_mutex_init(a_mutex, &attr);
+
     pthread_mutex_init(a_mutex, NULL);
     return a_mutex;
 }
@@ -61,13 +68,11 @@ void * request_memory(unsigned long long nr_bytes){
     openlog("xalloc", LOG_PID, LOG_DAEMON);
     syslog(LOG_DAEMON | LOG_ERR, "pid: %d has requested memory", getpid());
 
-    pthread_mutex_t * a_mutex;
-    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR | O_CREAT | O_TRUNC, 0666,
+    pthread_mutex_t * a_mutex = create_mutex();
+    /*a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR, 0666,
                                               sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE, MAP_SHARED);
-    /*
-    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR, 0644,
-                                              sizeof(pthread_mutex_t), PROT_READ, MAP_SHARED);
-*/
+    */
+    printf("created mutex at address %p; will try to lock it\n", a_mutex);
 
     void * shm_request = open_memory(MEM_REQUEST, O_RDWR, 0644,
                                          REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
@@ -77,7 +82,7 @@ void * request_memory(unsigned long long nr_bytes){
                                           RESPONSE_SIZE, PROT_READ, MAP_SHARED);
 
     void * x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
-                               getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
+                           getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
 
     pid_t own_pid, response_pid;
     own_pid = getpid();
@@ -102,6 +107,7 @@ void * request_memory(unsigned long long nr_bytes){
                 syslog(LOG_DAEMON | LOG_ERR, "pid: %d has UNlocked mutex", getpid());
                 return x + response;
             }
+            sleep(1);
         }
 }
 
@@ -163,6 +169,84 @@ static int write_allocator_pid() {
     return 0;
 }
 
+typedef struct linkedList{
+    int start_index;
+    int offset;
+    struct linkedList * next;
+}node;
+
+node * head = NULL;
+
+node * add_node(const int size){
+    syslog(LOG_DAEMON | LOG_ERR, "Added size %d in array ---------------------", size);
+    node * new;
+    new = (node *) malloc(sizeof(node));
+    if(new == NULL)
+        err_exit("Bad malloc!");
+    if(head == NULL){                       //  if the linkedList is empty
+        new -> start_index = 0;
+        new -> offset = size;
+        head = new;
+
+        head -> next = NULL;
+
+        return new;
+    }
+    else{                                   //  if there is space on the left side of the vector
+        if(size < head -> start_index){
+            new -> start_index = 0;
+            new -> offset = size;
+
+            new -> next = head;
+            head = new;
+
+            return new;
+        }
+        else{                               //  looking for first fit
+            for(node * x = head; x != NULL; x = x -> next){
+                if(x -> start_index + x -> offset + size - 1 < x -> next -> start_index){
+                    new -> start_index = x -> start_index + x -> offset;
+                    new -> offset = size;
+
+                    new -> next = x -> next;
+                    x -> next = new;
+                    
+                    return new;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+int delete_node(const int index){
+    int size;
+    if (head -> start_index == index) {
+        node * new = head;
+        head = head -> next;
+        
+        size = new -> offset;
+        free(new);
+        return size;
+    }
+        
+    for (node * x = head; x != NULL; x = x -> next)
+        if (x -> next -> start_index == index) {
+            node * new = x -> next;
+            x -> next = x -> next -> next;
+            
+            size = new -> offset;
+            free(new);
+            return size;
+        }
+    return 0;
+}
+
+node * realloc_node(const int index){
+    int size = delete_node(index);
+    return add_node(size);
+}
+
 int start_allocator() {
 	const char *LOGNAME = "xalloc";
 
@@ -192,7 +276,9 @@ int start_allocator() {
     const int pagesize = getpagesize();
     
     void * shm_requests = open_memory(MEM_REQUEST, O_RDWR | O_CREAT | O_TRUNC, 0644,
-                                      REQUEST_SIZE, PROT_READ, MAP_SHARED);
+                                      REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
+
+    sprintf(shm_requests, "-1 ");
 
     void * shm_responses = open_memory(MEM_RESPONSE, O_RDWR | O_CREAT | O_TRUNC, 0644,
                                       REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
@@ -200,7 +286,7 @@ int start_allocator() {
     void * memory_ptr = open_memory(ALLOCATED_SPACE, O_RDWR | O_CREAT, 0644,
                                     pagesize, PROT_READ, MAP_SHARED);
 
-    pthread_mutex_t * mutex = create_mutex();
+    create_mutex();
     //create_mutex();
 
     // run forever in the background
@@ -210,7 +296,8 @@ int start_allocator() {
         sscanf(shm_requests, "%d %lld", &pid, &nr_bytes);
         syslog(LOG_USER | LOG_ERR, "R: %d", pid);
         if(pid != -1){
-            sprintf(shm_responses, "%d %lld", pid, 0);
+            //node * x = add_node(nr_bytes);
+            sprintf(shm_responses, "%d %lld", pid, 0);//x -> start_index);
         }
         sleep(1);
     }
