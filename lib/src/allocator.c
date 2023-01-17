@@ -61,26 +61,30 @@ void * request_memory(unsigned long long nr_bytes){
     openlog("xalloc", LOG_PID, LOG_DAEMON);
     syslog(LOG_DAEMON | LOG_ERR, "pid: %d has requested memory", getpid());
 
-    pthread_mutex_t * a_mutex = create_mutex();
+    pthread_mutex_t * a_mutex;
+    a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR | O_CREAT | O_TRUNC, 0666,
+                                              sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE, MAP_SHARED);
     /*
     a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR, 0644,
                                               sizeof(pthread_mutex_t), PROT_READ, MAP_SHARED);
 */
+
+    void * shm_request = open_memory(MEM_REQUEST, O_RDWR, 0644,
+                                         REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
+    //syslog(LOG_DAEMON | LOG_INFO, "proces %d requesting memory from daemon, mutex = %p", getpid(), shm_lock);
+       
+    void * shm_response = open_memory(MEM_RESPONSE, O_RDWR, 0644,
+                                          RESPONSE_SIZE, PROT_READ, MAP_SHARED);
+
+    void * x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
+                               getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
+
+    pid_t own_pid, response_pid;
+    own_pid = getpid();
+
     pthread_mutex_lock(a_mutex);
     //  START OF CRITIZAL SECTION
         syslog(LOG_DAEMON | LOG_ERR, "pid: %d has locked mutex", getpid());
-        void * shm_request = open_memory(MEM_REQUEST, O_RDWR, 0644,
-                                         REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
-        //syslog(LOG_DAEMON | LOG_INFO, "proces %d requesting memory from daemon, mutex = %p", getpid(), shm_lock);
-       
-        void * shm_response = open_memory(MEM_RESPONSE, O_RDWR, 0644,
-                                          RESPONSE_SIZE, PROT_READ, MAP_SHARED);
-
-        void * x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
-                               getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
-
-        pid_t own_pid, response_pid;
-        own_pid = getpid();
         //  the caller proces sends its pid and the requiested bytes
         sprintf(shm_request, "%d %lld", own_pid, nr_bytes);
 
@@ -208,7 +212,7 @@ int start_allocator() {
         if(pid != -1){
             sprintf(shm_responses, "%d %lld", pid, 0);
         }
-        sleep(0.01);
+        sleep(1);
     }
 
     closelog();
