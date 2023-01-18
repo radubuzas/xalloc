@@ -1,18 +1,19 @@
 #include "./lib/include/allocator.h"
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <memory.h>
 
 int main(){
     pid_t pid = fork();
     char *p = (char *) request_memory(1000);
+    printf("p=%p\n", p);
     free_memory(p);
-    for(int i = 0; i < 1000/8 ; ++i)
-        p[i] = 'a';
+    // for(int i = 0; i < 1000/8 ; ++i)
+    //     p[i] = 'a';
     printf("p=%p pid=%d ppid=%d\n", p, getpid(), getppid());
-    wait(NULL);
 
     if(pid > 0) {
-        // wait(NULL);
+        wait(NULL);
         p = request_memory(100);
         sprintf(p, "Testez-testez-si-iar-testez");
         char *q = request_memory(100);
@@ -20,7 +21,7 @@ int main(){
         sscanf(p, "%s", q);
         printf("q=%s\n", q);
     }
-    else {
+    if(pid == 0) {
         char *v = request_memory(500);
         printf("v=%p\n", v);
         int cf = 0;
@@ -41,6 +42,8 @@ int main(){
             else cf += 4;
         }
     }
+
+    printf("pid %d will terminate\n", getpid());
 
     return 0;
 }

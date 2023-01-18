@@ -84,7 +84,7 @@ void * request_memory(unsigned long long nr_bytes){
                                           RESPONSE_SIZE, PROT_READ, MAP_SHARED);
 
     x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
-                           getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
+                           getpagesize() * 100, PROT_READ | PROT_WRITE, MAP_SHARED);
     }
 
     pid_t own_pid, response_pid;
@@ -99,11 +99,11 @@ void * request_memory(unsigned long long nr_bytes){
         //  the caller proces sends its pid and the requiested bytes
         sprintf(shm_request, "%d %llu", own_pid, nr_bytes);
 
-        unsigned long long response;
+        long long response;
         while(1){   //  waiting for response
             sscanf(shm_response, "%d %llu", &response_pid, &response);
-            syslog(LOG_DAEMON | LOG_ERR, "A: %d", response_pid);
-            if(own_pid == response_pid){
+            syslog(LOG_DAEMON | LOG_ERR, "A: %d %lld\n", response_pid, response);
+            if(own_pid == response_pid && response > 0){
                 sprintf(shm_request, "-1 ");
 
                 //  END OF CRITICAL SECTION
