@@ -8,6 +8,7 @@ const char *ALLOCATOR_PID_SHM = "xa_allocator_pid_shm"; //  here the allocator p
 const char *ALLOCATED_SPACE = "xalloc_shared_memory";   //  this is storing allocated data
 const char *MEM_REQUEST = "xalloc_memory_request";      //  the shm_mem where we are gonna put the request
 const char *CRITICAL_SECTION = "xalloc_mutex";          //  the mutex key will be accesible via shm
+const char *SEMAPHORE = "xalloc_semaphore";             //  the semaphore key will be accesible via shm
 const char *MEM_RESPONSE = "xalloc_memory_response";    //  the proces that's accessing the critical section will wait for approval!
 
 // Logs the value of errno along with any formatted message passed as argument.
@@ -48,6 +49,7 @@ void * open_memory(const char * shm_name, const int open_flag, const int open_mo
     return shm; 
 }
 
+
 pthread_mutex_t * create_mutex(){
     pthread_mutex_t * a_mutex;
     a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR,
@@ -62,19 +64,34 @@ pthread_mutex_t * create_mutex(){
     return a_mutex;
 }
 
+sem_t * create_semaphore(){
+    sem_t * a_sem;
+    a_sem = (sem_t *) open_memory(SEMAPHORE, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR,
+                                  sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED);
+
+    //  1 signals the sem should be used between multiple preocesses
+    if (sem_init(a_sem, 1, 0) == -1)
+        err_exit("error in create_semaphore at sem_init!");
+    return a_sem;
+}
+
 void * shm_request;
 void * shm_response;
 void * x;
 pthread_mutex_t * a_mutex;
+sem_t * a_sem;
 
 //  Request memory from daemon
 void * request_memory(unsigned long long nr_bytes){
     openlog("xalloc", LOG_PID, LOG_DAEMON);
     syslog(LOG_DAEMON | LOG_ERR, "pid: %d has requested memory", getpid());
 
-    if (!a_mutex && !shm_request && !shm_response && !x) {
+    if (!a_mutex && !shm_request && !shm_response && !x && !a_sem) {
     a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR, S_IRUSR | S_IWUSR,
                                               sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE, MAP_SHARED);
+
+    a_sem = (sem_t *) open_memory(SEMAPHORE, O_RDWR, S_IRUSR | S_IWUSR,
+                                  sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED);
 
     shm_request = open_memory(MEM_REQUEST, O_RDWR, 0644,
                                          REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
@@ -98,21 +115,24 @@ void * request_memory(unsigned long long nr_bytes){
         syslog(LOG_DAEMON | LOG_INFO, "pid: %d has locked mutex", getpid());
         //  the caller proces sends its pid and the requiested bytes
         sprintf(shm_request, "%d %llu", own_pid, nr_bytes);
+        
+        if(sem_post(a_sem) == -1)
+            err_exit("error in request_memory() at sem_post()");
 
         long long response;
         while(1){   //  waiting for response
             sscanf(shm_response, "%d %llu", &response_pid, &response);
             syslog(LOG_DAEMON | LOG_ERR, "A: %d %lld\n", response_pid, response);
-            if(own_pid == response_pid && response > 0){
+            if(own_pid == response_pid && response >= 0){
                 sprintf(shm_request, "-1 ");
                 sprintf(shm_response, "-1 ");
+
                 //  END OF CRITICAL SECTION
                 if(pthread_mutex_unlock(a_mutex) != 0)
                     err_exit("error in request_memory() at pthread_mutex_unlock()");
                 syslog(LOG_DAEMON | LOG_INFO, "pid: %d has UNlocked mutex", getpid());
                 return x + response;
             }
-            sleep(1);
         }
 }
 
@@ -132,6 +152,9 @@ void free_memory(void * addr){
         //  the caller proces sends its pid and the requiested bytes
         sprintf(shm_request, "%d -%llu", own_pid, offset);
 
+        if(sem_post(a_sem) == -1)
+            err_exit("error in request_memory() at sem_post()");
+
         int response;
         while(1){   //  waiting for response
             sscanf(shm_response, "%d %d", &response_pid, &response);
@@ -145,13 +168,7 @@ void free_memory(void * addr){
                 syslog(LOG_DAEMON | LOG_INFO, "FREE_MEM pid: %d has UNlocked mutex", getpid());
                 break;
             }
-            sleep(1);
         }
-}
-
-void get_block_of_memory(){
-    void * shm = open_memory(ALLOCATED_SPACE, O_RDWR, 0644, 
-                             getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
 }
 
 // Returns 0 if no allocator instance is running, 1 otherwise. Should be used only by allocator process.
@@ -331,21 +348,26 @@ int start_allocator() {
     sprintf(shm_requests, "-1 ");
 
     void * shm_responses = open_memory(MEM_RESPONSE, O_RDWR | O_CREAT | O_TRUNC, 0644,
-                                      REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
+                                       REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
 
-    void * memory_ptr = open_memory(ALLOCATED_SPACE, O_RDWR | O_CREAT, 0644,
-                                    pagesize * 100, PROT_READ, MAP_SHARED);
+    open_memory(ALLOCATED_SPACE, O_RDWR | O_CREAT, 0644,
+                pagesize * 100, PROT_READ, MAP_SHARED);
 
+    //  initializing mutex shared memory
     create_mutex();
-    //create_mutex();
+   
+    //  initializing semaphore object in shared memory 
+    sem_t * sem = create_semaphore();
 
-    // run forever in the background
+    //  run forever in the background
     pid_t pid;
     long long nr_bytes;
     while(1) {
+        if(sem_wait(sem) == -1)
+            err_exit("error in daemon at sem_wait()");
         int ret = sscanf(shm_requests, "%d %lld", &pid, &nr_bytes);
         if(ret != EOF && ret >= 1 && pid != -1){
-            syslog(LOG_DAEMON | LOG_INFO, "ret=%d pid=%d nr_bytes=%d, will write response for this pid", ret, pid, nr_bytes);
+            syslog(LOG_DAEMON | LOG_INFO, "ret=%d pid=%d nr_bytes=%lld, will write response for this pid", ret, pid, nr_bytes);
             if(nr_bytes > 0){
                 node * x = add_node(nr_bytes);
                 if (x == NULL)
@@ -353,12 +375,11 @@ int start_allocator() {
                 sprintf(shm_responses, "%d %d", pid, x -> start_index);
             }
             else{
-                syslog(LOG_DAEMON | LOG_INFO, "dealloc mem!", ret, pid);
+                syslog(LOG_DAEMON | LOG_INFO, "dealloc mem, pid: %d", pid);
                 delete_node(-1 * nr_bytes);
                 sprintf(shm_responses, "%d -1", pid);
             }
         }
-        sleep(1);
     }
 
     closelog();

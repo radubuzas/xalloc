@@ -8,8 +8,8 @@ int main(){
     char *p = (char *) request_memory(1000);
     printf("p=%p\n", p);
     free_memory(p);
-    // for(int i = 0; i < 1000/8 ; ++i)
-    //     p[i] = 'a';
+    for(int i = 0; i < 1000/8 ; ++i)
+         p[i] = 'a';
     printf("p=%p pid=%d ppid=%d\n", p, getpid(), getppid());
 
     if(pid > 0) {
