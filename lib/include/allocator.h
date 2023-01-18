@@ -18,5 +18,6 @@
 
 int start_allocator();
 void * request_memory(unsigned long long);
+void free_memory(void *);
 
 #endif

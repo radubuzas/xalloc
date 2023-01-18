@@ -62,24 +62,30 @@ pthread_mutex_t * create_mutex(){
     return a_mutex;
 }
 
+void * shm_request;
+void * shm_response;
+void * x;
+pthread_mutex_t * a_mutex;
+
 //  Request memory from daemon
 void * request_memory(unsigned long long nr_bytes){
     openlog("xalloc", LOG_PID, LOG_DAEMON);
     syslog(LOG_DAEMON | LOG_ERR, "pid: %d has requested memory", getpid());
 
-    pthread_mutex_t * a_mutex;
+    if (!a_mutex && !shm_request && !shm_response && !x) {
     a_mutex = (pthread_mutex_t *) open_memory(CRITICAL_SECTION, O_RDWR, S_IRUSR | S_IWUSR,
                                               sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE, MAP_SHARED);
 
-    void * shm_request = open_memory(MEM_REQUEST, O_RDWR, 0644,
+    shm_request = open_memory(MEM_REQUEST, O_RDWR, 0644,
                                          REQUEST_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
     //syslog(LOG_DAEMON | LOG_INFO, "proces %d requesting memory from daemon, mutex = %p", getpid(), shm_lock);
        
-    void * shm_response = open_memory(MEM_RESPONSE, O_RDWR, 0644,
+    shm_response = open_memory(MEM_RESPONSE, O_RDWR, 0644,
                                           RESPONSE_SIZE, PROT_READ, MAP_SHARED);
 
-    void * x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
+    x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
                            getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED);
+    }
 
     pid_t own_pid, response_pid;
     own_pid = getpid();
@@ -91,7 +97,7 @@ void * request_memory(unsigned long long nr_bytes){
     //  START OF CRITIZAL SECTION
         syslog(LOG_DAEMON | LOG_INFO, "pid: %d has locked mutex", getpid());
         //  the caller proces sends its pid and the requiested bytes
-        sprintf(shm_request, "%d %lld", own_pid, nr_bytes);
+        sprintf(shm_request, "%d %llu", own_pid, nr_bytes);
 
         unsigned long long response;
         while(1){   //  waiting for response
@@ -103,8 +109,41 @@ void * request_memory(unsigned long long nr_bytes){
                 //  END OF CRITICAL SECTION
                 if(pthread_mutex_unlock(a_mutex) != 0)
                     err_exit("error in request_memory() at pthread_mutex_unlock()");
-                syslog(LOG_DAEMON | LOG_INFO, "pid: %d has UNlocked mutex %p", getpid());
+                syslog(LOG_DAEMON | LOG_INFO, "pid: %d has UNlocked mutex", getpid());
                 return x + response;
+            }
+            sleep(1);
+        }
+}
+
+
+void free_memory(void * addr){
+    unsigned long long offset = addr - x;
+    syslog(LOG_DAEMON | LOG_ERR, "offset: %llu", offset);
+    pid_t own_pid, response_pid;
+    own_pid = getpid();
+
+    if(pthread_mutex_lock(a_mutex) != 0) {
+        printf("error in pthread_mutex_lock\n");
+        err_exit("error in request_memory() at pthread_mutex_lock()");
+    }
+    //  START OF CRITIZAL SECTION
+        syslog(LOG_DAEMON | LOG_INFO, "FREE_MEM pid: %d has locked mutex", getpid());
+        //  the caller proces sends its pid and the requiested bytes
+        sprintf(shm_request, "%d -%llu", own_pid, offset);
+
+        int response;
+        while(1){   //  waiting for response
+            sscanf(shm_response, "%d %d", &response_pid, &response);
+            syslog(LOG_DAEMON | LOG_ERR, "F: %d", response_pid);
+            if(own_pid == response_pid && response < 0){
+                sprintf(shm_request, "-1 ");
+
+                //  END OF CRITICAL SECTION
+                if(pthread_mutex_unlock(a_mutex) != 0)
+                    err_exit("error in request_memory() at pthread_mutex_unlock()");
+                syslog(LOG_DAEMON | LOG_INFO, "FREE_MEM pid: %d has UNlocked mutex", getpid());
+                break;
             }
             sleep(1);
         }
@@ -240,8 +279,8 @@ int delete_node(const int index){
         free(new);
         return size;
     }
-        
-    for (node * x = head; x != NULL; x = x -> next)
+    
+    for (node * x = head; x -> next != NULL; x = x -> next)
         if (x -> next -> start_index == index) {
             node * new = x -> next;
             x -> next = x -> next -> next;
@@ -302,15 +341,22 @@ int start_allocator() {
 
     // run forever in the background
     pid_t pid;
-    unsigned long long nr_bytes;
+    long long nr_bytes;
     while(1) {
         int ret = sscanf(shm_requests, "%d %lld", &pid, &nr_bytes);
         if(ret != EOF && ret >= 1 && pid != -1){
-            syslog(LOG_DAEMON | LOG_INFO, "ret=%d pid=%d, will write response for this pid", ret, pid);
-            node * x = add_node(nr_bytes);
-            if (x == NULL)
-                err_exit("OUT OF MEM!");
-            sprintf(shm_responses, "%d %lld", pid, x -> start_index);
+            syslog(LOG_DAEMON | LOG_INFO, "ret=%d pid=%d nr_bytes=%d, will write response for this pid", ret, pid, nr_bytes);
+            if(nr_bytes > 0){
+                node * x = add_node(nr_bytes);
+                if (x == NULL)
+                    err_exit("OUT OF MEM!");
+                sprintf(shm_responses, "%d %d", pid, x -> start_index);
+            }
+            else{
+                syslog(LOG_DAEMON | LOG_INFO, "dealloc mem!", ret, pid);
+                delete_node(-1 * nr_bytes);
+                sprintf(shm_responses, "%d -1", pid);
+            }
         }
         sleep(1);
     }
