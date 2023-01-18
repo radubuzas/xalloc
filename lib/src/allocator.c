@@ -81,7 +81,7 @@ void * request_memory(unsigned long long nr_bytes){
     //syslog(LOG_DAEMON | LOG_INFO, "proces %d requesting memory from daemon, mutex = %p", getpid(), shm_lock);
        
     shm_response = open_memory(MEM_RESPONSE, O_RDWR, 0644,
-                                          RESPONSE_SIZE, PROT_READ, MAP_SHARED);
+                               RESPONSE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED);
 
     x = open_memory(ALLOCATED_SPACE, O_RDWR, 0666,
                            getpagesize() * 100, PROT_READ | PROT_WRITE, MAP_SHARED);
@@ -105,7 +105,7 @@ void * request_memory(unsigned long long nr_bytes){
             syslog(LOG_DAEMON | LOG_ERR, "A: %d %lld\n", response_pid, response);
             if(own_pid == response_pid && response > 0){
                 sprintf(shm_request, "-1 ");
-
+                sprintf(shm_response, "-1 ");
                 //  END OF CRITICAL SECTION
                 if(pthread_mutex_unlock(a_mutex) != 0)
                     err_exit("error in request_memory() at pthread_mutex_unlock()");
