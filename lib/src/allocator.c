@@ -133,6 +133,8 @@ void * request_memory(unsigned long long nr_bytes){
                 syslog(LOG_DAEMON | LOG_INFO, "pid: %d has UNlocked mutex", getpid());
                 return x + response;
             }
+            if(sem_post(a_sem) == -1)
+                err_exit("error in request_memory() in while at sem_post()");
         }
 }
 
@@ -153,7 +155,7 @@ void free_memory(void * addr){
         sprintf(shm_request, "%d -%llu", own_pid, offset);
 
         if(sem_post(a_sem) == -1)
-            err_exit("error in request_memory() at sem_post()");
+            err_exit("error in free_memory() at sem_post()");
 
         int response;
         while(1){   //  waiting for response
@@ -168,6 +170,8 @@ void free_memory(void * addr){
                 syslog(LOG_DAEMON | LOG_INFO, "FREE_MEM pid: %d has UNlocked mutex", getpid());
                 break;
             }
+            if(sem_post(a_sem) == -1)
+                err_exit("error in free_memory() in while at sem_post()");
         }
 }
 
